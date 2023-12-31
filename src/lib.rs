@@ -1,16 +1,19 @@
+mod format;
+
 use std::collections::HashMap;
 use std::cell::{Ref, RefCell};
 use std::rc::{Rc, Weak};
+use format::Min;
 
-pub struct Heap<T> {
-    n: i32,
+pub struct Heap<K: PartialOrd + std::fmt::Display + Min + Copy, V: Copy + std::fmt::Display> {
+    n: usize,
     rank: usize,
     trees: usize,
     marks: i32,
-    min: Option<Rc<Node<T>>>,
+    min: Option<Rc<Node<K,V>>>,
 }
 
-impl<T> Heap<T> {
+impl<K: std::fmt::Display + PartialOrd + Min + Copy,V: Copy + std::fmt::Display> Heap<K,V> {
     pub fn new() -> Self {
         Heap {
             n: 0,
@@ -21,11 +24,11 @@ impl<T> Heap<T> {
         }
     }
 
-    fn get_min(&self) -> Option<Rc<Node<T>>> {
+    fn get_min(&self) -> Option<Rc<Node<K,V>>> {
         Node::from_borrowed_option_rc(&self.min)
     }
 
-    pub fn insert(&mut self, key: i32, value: T) -> Weak<Node<T>> {
+    pub fn insert(&mut self, key: K, value: V) -> Weak<Node<K,V>> {
         self.n += 1;
         self.trees += 1;
 
@@ -91,7 +94,8 @@ impl<T> Heap<T> {
         }
     }
 
-    pub fn reduce_key(&mut self, node: Rc<Node<T>>, key: i32) {
+    // set the Key of the Node {node} to {key}.
+    pub fn reduce_key(&mut self, node: Rc<Node<K,V>>, key: K) {
         if key < node.get_key() {
             node.set_key(key);
 
@@ -101,6 +105,7 @@ impl<T> Heap<T> {
                 }
             }
 
+            // order has changed
             let root = self.get_min().unwrap();
 
             if node.get_key() < root.get_key() {
@@ -108,15 +113,16 @@ impl<T> Heap<T> {
             }
 
             self.prune(node, root);
+
         }
     }
 
-    pub fn delete(&mut self, node: Rc<Node<T>>) {
-        self.reduce_key(node, i32::min_value());
+    pub fn delete(&mut self, node: Rc<Node<K,V>>) {
+        self.reduce_key(node, K::min_value());
         self.delete_min();
     }
 
-    pub fn union(&mut self, mut heap: Heap<T>) {
+    pub fn union(&mut self, mut heap: Heap<K,V>) {
         if let Some(f_min) = heap.get_min() {
             if let Some(l_min) = self.get_min() {
                 if f_min.get_key() < l_min.get_key() {
@@ -131,7 +137,7 @@ impl<T> Heap<T> {
         }
     }
 
-    fn prune(&mut self, node: Rc<Node<T>>, root: Rc<Node<T>>) -> Option<()> {
+    fn prune(&mut self, node: Rc<Node<K,V>>, root: Rc<Node<K,V>>) -> Option<()> {
         let parent = node.get_parent()?;
         let child = parent.get_child().unwrap();
 
@@ -166,7 +172,7 @@ impl<T> Heap<T> {
     }
 }
 
-impl<T> Drop for Heap<T> {
+impl<K,V> Drop for Heap<K,V> where K: PartialOrd + std::fmt::Display + Min + Copy, V: Copy + std::fmt::Display {
     fn drop(&mut self) {
         if let Some(min) = self.get_min() {
             for node in NodeIterator::new(min) {
@@ -176,19 +182,19 @@ impl<T> Drop for Heap<T> {
     }
 }
 
-pub struct Node<T> {
-    key: RefCell<i32>,
-    value: T,
+pub struct Node<K,V> {
+    key: RefCell<K>,
+    value: V,
     rank: RefCell<usize>,
     marked: RefCell<bool>,
-    left: RefCell<Option<Rc<Node<T>>>>,
-    right: RefCell<Option<Weak<Node<T>>>>,
-    parent: RefCell<Option<Weak<Node<T>>>>,
-    child: RefCell<Option<Rc<Node<T>>>>,
+    left: RefCell<Option<Rc<Node<K,V>>>>,
+    right: RefCell<Option<Weak<Node<K,V>>>>,
+    parent: RefCell<Option<Weak<Node<K,V>>>>,
+    child: RefCell<Option<Rc<Node<K,V>>>>,
 }
 
-impl<T> Node<T> {
-    fn new(key: i32, value: T) -> Rc<Self> {
+impl<K: std::fmt::Display + PartialOrd + Min + Copy,V: Copy> Node<K,V> {
+    fn new(key: K, value: V) -> Rc<Self> {
         let node = Rc::new(Node {
             key: RefCell::new(key),
             value: value,
@@ -206,15 +212,15 @@ impl<T> Node<T> {
         node
     }
 
-    pub fn get_value(self) -> T {
+    pub fn get_value(&self) -> V {
         self.value
     }
 
-    pub fn get_key(&self) -> i32 {
+    pub fn get_key(&self) -> K {
         *self.key.borrow()
     }
 
-    fn set_key(&self, key: i32) {
+    fn set_key(&self, key: K) {
         *self.key.borrow_mut() = key;
     }
 
@@ -260,7 +266,7 @@ impl<T> Node<T> {
         }
     }
 
-    fn remove(node: Rc<Node<T>>) -> Rc<Node<T>> {
+    fn remove(node: Rc<Node<K,V>>) -> Rc<Node<K,V>> {
         let left = node.get_left().unwrap();
         let right = node.get_right().unwrap();
 
@@ -407,13 +413,13 @@ impl<T> Node<T> {
     }
 }
 
-pub struct NodeConsolidator<T> {
+pub struct NodeConsolidator<K,V> {
     trees: usize,
     rank: usize,
-    ranks: HashMap<usize, Rc<Node<T>>>,
+    ranks: HashMap<usize, Rc<Node<K,V>>>,
 }
 
-impl<T> NodeConsolidator<T> {
+impl<K: PartialOrd + Min + std::fmt::Display + Copy, V: Copy> NodeConsolidator<K,V> {
     fn new(trees: usize) -> Self {
         NodeConsolidator {
             trees: trees,
@@ -422,7 +428,7 @@ impl<T> NodeConsolidator<T> {
         }
     }
 
-    fn consolidate(&mut self, node: Rc<Node<T>>) {
+    fn consolidate(&mut self, node: Rc<Node<K,V>>) {
         if self.ranks.len() == self.trees {
             return;
         }
@@ -459,7 +465,7 @@ impl<T> NodeConsolidator<T> {
         }
     }
 
-    fn merge_nodes(&mut self, lesser_node: Rc<Node<T>>, greater_node: Rc<Node<T>>) -> Rc<Node<T>> {
+    fn merge_nodes(&mut self, lesser_node: Rc<Node<K,V>>, greater_node: Rc<Node<K,V>>) -> Rc<Node<K,V>> {
         self.trees -= 1;
 
         if let Some(parent) = greater_node.get_parent() {
@@ -489,14 +495,14 @@ impl<T> NodeConsolidator<T> {
     }
 }
 
-pub struct NodeIterator<T> {
-    first: Rc<Node<T>>,
-    current: Option<Rc<Node<T>>>,
+pub struct NodeIterator<K,V> {
+    first: Rc<Node<K,V>>,
+    current: Option<Rc<Node<K,V>>>,
     first_seen: bool,
 }
 
-impl<T> NodeIterator<T> {
-    fn new(node: Rc<Node<T>>) -> Self {
+impl<K,V> NodeIterator<K,V> {
+    fn new(node: Rc<Node<K,V>>) -> Self {
         NodeIterator {
             first: Rc::clone(&node),
             current: Some(Rc::clone(&node)),
@@ -505,8 +511,8 @@ impl<T> NodeIterator<T> {
     }
 }
 
-impl<T> Iterator for NodeIterator<T> {
-    type Item = Rc<Node<T>>;
+impl<K,V> Iterator for NodeIterator<K,V> where K: PartialOrd + Min + std::fmt::Display + Copy, V: Copy {
+    type Item = Rc<Node<K,V>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let current = Node::from_borrowed_option_rc(&self.current)?;
@@ -525,8 +531,129 @@ impl<T> Iterator for NodeIterator<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::{rc::{self, Rc}};
+
+    use crate::Heap;
+
     #[test]
     fn it_works() {
         assert_eq!(2 + 2, 4);
+    }
+
+    #[test]
+    fn basic_test(){
+        let mut heap = Heap::new();
+        heap.print();
+        let v: Vec<_> = (0..17).map(|i| heap.insert(i, i)).collect();
+
+        for i in 0..17{
+            let n = heap.get_min();
+            assert_eq!(n.is_some(), true);
+            assert_eq!(n.clone().unwrap().value , i, 
+                "Min element should be {}, but is {}.", 
+                i,
+                n.unwrap().value,
+            );
+
+            heap.delete_min();
+            let n = heap.get_min();
+            if n.is_some(){
+                assert_ne!(n.clone().unwrap().value , i, 
+                    "Min element has been deleted. Should be different to {}, but is {}.", 
+                    i,
+                    n.unwrap().value,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn decrease_test(){
+        let mut heap = Heap::new();
+        heap.print();
+        let v: Vec<_> = (1..17).map(|i| heap.insert(i, i)).collect();
+
+        for i in 1..17{
+            let n = heap.get_min();
+            assert_eq!(n.is_some(), true);
+            assert_eq!(i, n.clone().unwrap().get_key(), 
+                "Min element should be {}, but is {}.", 
+                i,
+                n.clone().unwrap().get_key(),
+            );
+
+            //println!("old key: {} ", n.clone().unwrap().get_key());
+
+            heap.reduce_key( n.clone().unwrap(), i-1);
+
+            //let n = heap.get_min();
+            //println!("new key: {} ", n.unwrap().get_key());
+
+            //  the min should be one less now.
+            let n = heap.get_min();
+            assert_eq!(n.is_some(), true);
+            assert_eq!(i-1, n.clone().unwrap().get_key(), 
+                "Min element should be one less now. Should be {}, but is {}.", 
+                i-1,
+                n.clone().unwrap().get_key(),
+            );
+
+            heap.delete_min();
+
+            let n = heap.get_min();
+
+            if n.is_some(){
+                assert_eq!(i+1, n.clone().unwrap().get_key(),
+                    "Min element should be again {}, but is {}.", 
+                    i+1,
+                    n.clone().unwrap().get_key(),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn decrease_test2(){
+        let mut heap = Heap::new();
+        heap.print();
+        let v: Vec<_> = (1..17).map(|i| heap.insert(i, i)).collect();
+
+        // length should be one less now
+        assert_eq!(heap.n, 16);
+
+        // check initial min
+        let ee = heap.get_min();
+        assert_eq!(ee.is_some(), true);
+        let e = ee.unwrap();
+        assert_eq!(e.get_key(), 1);
+        assert_eq!(e.get_value(), 1);
+
+        // e should be (2, 2)
+        let e = v[2].upgrade().unwrap();
+        assert_eq!(e.get_key(), 3);
+        assert_eq!(e.get_value(), 3);
+
+        // set e to (0,2)
+        heap.reduce_key(e, 0);
+
+    
+        // check new min
+        let ee = heap.get_min();
+        assert_eq!(ee.is_some(), true);
+        let e = ee.unwrap();
+        assert_eq!(e.get_key(), 0);
+        assert_eq!(e.get_value(), 3);
+
+        heap.delete_min();
+        // length should be one less now
+        assert_eq!(heap.n, 15);
+
+        // check initial min. should be back
+        let ee = heap.get_min();
+        assert_eq!(ee.is_some(), true);
+        let e = ee.unwrap();
+        assert_eq!(e.get_key(), 1);
+        assert_eq!(e.get_value(), 1);
+
     }
 }

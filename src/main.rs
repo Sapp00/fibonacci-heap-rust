@@ -3,7 +3,7 @@ extern crate fibonacci_heap;
 use std::rc::Weak;
 use fibonacci_heap::{Heap, Node};
 
-fn heap_stuff() -> Vec<Weak<Node<i32>>> {
+fn heap_stuff() -> Vec<Weak<Node<i32,i32>>> {
     println!("creating:");
     let mut heap = Heap::new();
     heap.print();
